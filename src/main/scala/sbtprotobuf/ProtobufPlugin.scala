@@ -3,8 +3,10 @@ package sbtprotobuf
 import sbt._
 import Keys._
 import sbt.Defaults.{collectFiles, packageTaskSettings}
+
 import java.io.File
 import com.github.os72.protocjar
+import sbt.KeyRanks.ASetting
 
 object ProtobufTestPlugin extends ScopedProtobufPlugin(Test, "-test")
 
@@ -19,6 +21,8 @@ class ScopedProtobufPlugin(configuration: Configuration, private[sbtprotobuf] va
   val protoClassifier = "proto"
 
   object Keys {
+    val kotlinSource = settingKey[File]("Default Kotlin source directory.").withRank(ASetting)
+
     val ProtobufConfig = self.ProtobufConfig
     @deprecated("will be removed. use ProtobufConfig", "0.6.2")
     val protobufConfig = ProtobufConfig
@@ -29,6 +33,7 @@ class ScopedProtobufPlugin(configuration: Configuration, private[sbtprotobuf] va
     val protobufRunProtoc = taskKey[Seq[String] => Int]("A function that executes the protobuf compiler with the given arguments, returning the exit code of the compilation run.")
     val protobufExternalIncludePath = settingKey[File]("The path to which protobuf:libraryDependencies are extracted and which is used as protobuf:includePath for protoc")
     val protobufGeneratedTargets = settingKey[Seq[(File,String)]]("Targets for protoc: target directory and glob for generated source files")
+    val protobufGeneratedKotlinTargets = settingKey[Seq[(File,String)]]("Targets for protoc: target directory and glob for generated kotlin source files")
     val protobufGenerate = taskKey[Seq[File]]("Compile the protobuf sources.")
     val protobufUnpackDependencies = taskKey[UnpackedDependencies]("Unpack dependencies.")
     val protobufProtocOptions = settingKey[Seq[String]]("Additional options to be passed to protoc")
@@ -46,6 +51,7 @@ class ScopedProtobufPlugin(configuration: Configuration, private[sbtprotobuf] va
   override lazy val globalSettings: Seq[Setting[_]] = Seq(
     protobufUseSystemProtoc := false,
     protobufGeneratedTargets := Nil,
+    protobufGeneratedKotlinTargets := Nil,
     protobufProtocOptions := Nil
   )
 
@@ -54,6 +60,7 @@ class ScopedProtobufPlugin(configuration: Configuration, private[sbtprotobuf] va
     sourceDirectories := (sourceDirectory.value :: Nil),
     includeFilter := "*.proto",
     javaSource := { (configuration / sourceManaged).value / "compiled_protobuf" },
+    kotlinSource := { (configuration / sourceManaged).value / "compiled_kt_protobuf" },
     protobufExternalIncludePath := (target.value / "protobuf_external"),
     protobufProtoc := "protoc",
     protobufRunProtoc := {
@@ -70,6 +77,7 @@ class ScopedProtobufPlugin(configuration: Configuration, private[sbtprotobuf] va
     version := SbtProtobufBuildInfo.defaultProtobufVersion,
 
     protobufGeneratedTargets += Tuple2((ProtobufConfig / javaSource).value, "*.java"), // add javaSource to the list of patterns
+    protobufGeneratedKotlinTargets += Tuple2((ProtobufConfig / kotlinSource).value, "*.kt"), // add kotlinSource to the list of patterns
 
     protobufProtocOptions ++= { // if a java target is provided, add java generation option
       (ProtobufConfig / protobufGeneratedTargets).value.find(_._2.endsWith(".java")) match {
@@ -77,7 +85,12 @@ class ScopedProtobufPlugin(configuration: Configuration, private[sbtprotobuf] va
         case None => Nil
       }
     },
-
+    protobufProtocOptions ++= { // if a kotlin target is provided, add kotlin generation option
+      (ProtobufConfig / protobufGeneratedKotlinTargets).value.find(_._2.endsWith(".kt")) match {
+        case Some(targetsForKotlin) => Seq("--kotlin_out=%s".format(targetsForKotlin._1.getCanonicalPath))
+        case None => Nil
+      }
+    },
     managedClasspath := {
       Classpaths.managedJars(ProtobufConfig, classpathTypes.value, update.value)
     },
@@ -95,9 +108,11 @@ class ScopedProtobufPlugin(configuration: Configuration, private[sbtprotobuf] va
     watchSourcesSetting,
     configuration / sourceGenerators += (ProtobufConfig / protobufGenerate).taskValue,
     cleanFiles ++= (ProtobufConfig / protobufGeneratedTargets).value.map{_._1},
+    cleanFiles ++= (ProtobufConfig / protobufGeneratedKotlinTargets).value.map{_._1},
     cleanFiles += (ProtobufConfig / protobufExternalIncludePath).value,
     configuration / managedSourceDirectories ++= (ProtobufConfig / protobufGeneratedTargets).value.map{_._1},
     libraryDependencies += ("com.google.protobuf" % "protobuf-java" % (ProtobufConfig / version).value),
+    libraryDependencies += ("com.google.protobuf" % "protobuf-kotlin" % (ProtobufConfig / version).value),
     ivyConfigurations += ProtobufConfig,
     setProtoArtifact
   )
@@ -159,7 +174,7 @@ class ScopedProtobufPlugin(configuration: Configuration, private[sbtprotobuf] va
       val runProtoc = protobufRunProtoc.value
       val includePaths = (ProtobufConfig / protobufIncludePaths).value
       val options = (ProtobufConfig / protobufProtocOptions).value
-      val targets = (ProtobufConfig / protobufGeneratedTargets).value
+      val targets = (ProtobufConfig / protobufGeneratedTargets).value ++ (ProtobufConfig / protobufGeneratedKotlinTargets).value
       val cachedCompile = FileFunction.cached(cacheFile, inStyle = FilesInfo.lastModified, outStyle = FilesInfo.exists) { (in: Set[File]) =>
         compile(
           protocCommand = runProtoc,
