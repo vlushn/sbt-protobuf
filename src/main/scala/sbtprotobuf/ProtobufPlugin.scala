@@ -120,7 +120,7 @@ class ScopedProtobufPlugin(configuration: Configuration, private[sbtprotobuf] va
     configuration / sourceGenerators += (ProtobufConfig / protobufGenerate).taskValue,
     cleanFiles ++= (ProtobufConfig / protobufGeneratedTargets).value.map{_._1},
     cleanFiles += (ProtobufConfig / protobufExternalIncludePath).value,
-    configuration / managedSourceDirectories ++= (ProtobufConfig / protobufGeneratedTargets).value.map{_._1},
+    configuration / managedSourceDirectories += (ProtobufConfig / javaSource).value,
     libraryDependencies += ("com.google.protobuf" % "protobuf-java" % (ProtobufConfig / version).value),
     ivyConfigurations += ProtobufConfig,
     setProtoArtifact
