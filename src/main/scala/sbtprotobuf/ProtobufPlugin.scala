@@ -21,7 +21,7 @@ class ScopedProtobufPlugin(configuration: Configuration, private[sbtprotobuf] va
 
   object Keys {
     val protobufUseKotlin = settingKey[Boolean]("Use Kotlin instead of Java")
-    val kotlinSource = settingKey[File]("Default Kotlin source directory.")
+    val protobufKotlinSource = settingKey[File]("Default Kotlin source directory.")
 
     val ProtobufConfig = self.ProtobufConfig
     @deprecated("will be removed. use ProtobufConfig", "0.6.2")
@@ -59,7 +59,7 @@ class ScopedProtobufPlugin(configuration: Configuration, private[sbtprotobuf] va
     sourceDirectories := (sourceDirectory.value :: Nil),
     includeFilter := "*.proto",
     javaSource := { (configuration / sourceManaged).value / "compiled_protobuf" },
-    kotlinSource := { (configuration / sourceManaged).value / "compiled_kt_protobuf" },
+    protobufKotlinSource := { (configuration / sourceManaged).value / "compiled_kt_protobuf" },
     protobufExternalIncludePath := (target.value / "protobuf_external"),
     protobufProtoc := "protoc",
     protobufRunProtoc := {
@@ -77,7 +77,7 @@ class ScopedProtobufPlugin(configuration: Configuration, private[sbtprotobuf] va
 
     protobufGeneratedTargets += Tuple2((ProtobufConfig / javaSource).value, "*.java"),
     protobufGeneratedTargets ++= {
-      if (protobufUseKotlin.value) Seq(Tuple2((ProtobufConfig / kotlinSource).value, "*.kt"))
+      if (protobufUseKotlin.value) Seq(Tuple2((ProtobufConfig / protobufKotlinSource).value, "*.kt"))
       else Nil
     }, // add kotlinSource to the list of patterns
 
