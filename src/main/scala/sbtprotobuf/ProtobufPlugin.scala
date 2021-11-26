@@ -75,22 +75,17 @@ class ScopedProtobufPlugin(configuration: Configuration, private[sbtprotobuf] va
     },
     version := SbtProtobufBuildInfo.defaultProtobufVersion,
 
-    protobufGeneratedTargets += {
-      if (protobufUseKotlin.value) {
-        Tuple2((ProtobufConfig / kotlinSource).value, "*.kt")
-      } else {
-        Tuple2((ProtobufConfig / javaSource).value, "*.java")
-      }
-    }, // add javaSource to the list of patterns
+    protobufGeneratedTargets += Tuple2((ProtobufConfig / javaSource).value, "*.java"),
+    protobufGeneratedTargets ++= {
+      if (protobufUseKotlin.value) Seq(Tuple2((ProtobufConfig / kotlinSource).value, "*.kt"))
+      else Nil
+    }, // add kotlinSource to the list of patterns
 
     protobufProtocOptions ++= {
-      if (protobufUseKotlin.value) Nil
-      else {
-        // if a java target is provided, add java generation option
-        (ProtobufConfig / protobufGeneratedTargets).value.find(_._2.endsWith(".java")) match {
-          case Some(targetForJava) => Seq("--java_out=%s".format(targetForJava._1.getCanonicalPath))
-          case None => Nil
-        }
+      // if a java target is provided, add java generation option
+      (ProtobufConfig / protobufGeneratedTargets).value.find(_._2.endsWith(".java")) match {
+        case Some(targetForJava) => Seq("--java_out=%s".format(targetForJava._1.getCanonicalPath))
+        case None => Nil
       }
     },
     protobufProtocOptions ++= {
@@ -112,8 +107,12 @@ class ScopedProtobufPlugin(configuration: Configuration, private[sbtprotobuf] va
     protobufIncludePaths := ((ProtobufConfig / sourceDirectory).value :: Nil),
     protobufIncludePaths += protobufExternalIncludePath.value,
 
-    protobufGenerate := sourceGeneratorTask.dependsOn(protobufUnpackDependencies).value
+    protobufGenerate := sourceGeneratorTask.dependsOn(protobufUnpackDependencies).value,
 
+    libraryDependencies ++= {
+      if (protobufUseKotlin.value) Seq("com.google.protobuf" % "protobuf-kotlin" % (ProtobufConfig / version).value)
+      else Nil
+    },
   )) ++ inConfig(ProtobufConfig)(
     packageTaskSettings(protobufPackage, packageProtoMappings)
   ) ++ Seq[Setting[_]](
@@ -123,7 +122,6 @@ class ScopedProtobufPlugin(configuration: Configuration, private[sbtprotobuf] va
     cleanFiles += (ProtobufConfig / protobufExternalIncludePath).value,
     configuration / managedSourceDirectories ++= (ProtobufConfig / protobufGeneratedTargets).value.map{_._1},
     libraryDependencies += ("com.google.protobuf" % "protobuf-java" % (ProtobufConfig / version).value),
-    libraryDependencies += ("com.google.protobuf" % "protobuf-kotlin" % (ProtobufConfig / version).value),
     ivyConfigurations += ProtobufConfig,
     setProtoArtifact
   )
